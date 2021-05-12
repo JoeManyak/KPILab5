@@ -63,20 +63,17 @@ func (head *rect) resize(newNode node) {
 
 func (head *rect) insert(newNode node) {
 	if len(head.subRects) != 0 {
-		var minId = 0
-		var minArea = head.subRects[0].area()
-		var curArea = head.area()
-		for i, v := range head.subRects {
-			if curArea < minArea {
-				minId = i
-				minArea = v.area()
-			}
+		if head.subRects[0].area() < head.subRects[1].area() {
+			head.subRects[0].insert(newNode)
+		} else {
+			head.subRects[1].insert(newNode)
 		}
-		head.subRects[minId].insert(newNode)
 		return
 	}
 	if len(head.nodes) == maxNodes {
-		//Split
+		head.split()
+		head.insert(newNode)
+		return
 	}
 
 	head.minCoords.GetSmallest(newNode.coords, len(head.nodes) == 0)
@@ -85,8 +82,66 @@ func (head *rect) insert(newNode node) {
 	head.nodes = append(head.nodes, newNode)
 }
 
-func () {
+func (head *rect) split() {
+	if len(head.nodes) == 0 {
+		log.Fatal("Nothing to split")
+	}
+	*head = subdivide(rect{}, rect{}, *head)
+}
 
+func (head *rect) deleteNode(id int) {
+	temp := make([]node, len(head.nodes)-1)
+	copy(temp[:id], head.nodes[:id])
+	copy(temp[id:], head.nodes[id+1:])
+	head.nodes = temp
+}
+
+func subdivide(leftRect rect, rightRect rect, head rect) rect {
+	var selected *rect
+	var minId int
+	var minArea = -1.0
+	for i, v := range head.nodes {
+		tempRect := leftRect
+		tempRect.nodes = append(tempRect.nodes, v)
+		if minArea == -1.0 || minArea > tempRect.area() {
+			minArea = tempRect.area()
+			minId = i
+			selected = &leftRect
+		}
+		tempRect = rightRect
+		tempRect.nodes = append(tempRect.nodes, v)
+		if minArea == -1.0 || minArea > tempRect.area() {
+			minArea = tempRect.area()
+			minId = i
+			selected = &rightRect
+		}
+	}
+	if selected != nil {
+		(*selected).resize(head.nodes[minId])
+		(*selected).nodes = append((*selected).nodes, head.nodes[minId])
+		head.deleteNode(minId)
+	}
+	if len(head.nodes) == 0 {
+		head.subRects = []*rect{&leftRect, &rightRect}
+		return head
+	}
+	return subdivide(leftRect, rightRect, head)
+}
+
+func (head *rect) show() {
+	head.showUtil(0)
+}
+
+func (head *rect) showUtil(number int) {
+	fmt.Printf("%s|%d block: \n", strings.Repeat("->", number*3), number)
+	if len(head.subRects) != 0 {
+		head.subRects[0].showUtil(number + 1)
+		head.subRects[1].showUtil(number + 1)
+	} else {
+		for _, v := range head.nodes {
+			fmt.Printf("%s|%v \n", strings.Repeat("->", number*3), v)
+		}
+	}
 }
 
 func main() {
@@ -96,11 +151,12 @@ func main() {
 	}
 	var head rect
 	reader := bufio.NewScanner(file)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 500; i++ {
 		var newNode node
 		reader.Scan()
 		newNode.parseCSV(reader.Text())
 		head.insert(newNode)
-		fmt.Println(head.minCoords, head.maxCoords)
 	}
+	fmt.Println(head)
+	head.show()
 }
