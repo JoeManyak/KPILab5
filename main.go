@@ -45,6 +45,28 @@ func (n *node) parseCSV(str string) {
 	n.addressNumber = sl[6]
 }
 
+func (n *node) parseCSVNoMercator(str string) {
+	sl := strings.Split(str, ";")
+	//Get coords
+	Lat, err := strconv.ParseFloat(sl[0], 64)
+	if err != nil {
+		log.Fatal("Invalid data:", sl[0], "is not a float value")
+	}
+	Long, err := strconv.ParseFloat(sl[1], 64)
+	if err != nil {
+		log.Fatal("Invalid data:", sl[1], "is not a float value")
+	}
+	n.coords = mercator.Coords{
+		X: Long,
+		Y: Lat,
+	}
+	n.nodeType = sl[2]
+	n.nodeSubType = sl[3]
+	n.name = sl[4]
+	n.address = sl[5]
+	n.addressNumber = sl[6]
+}
+
 type rect struct {
 	minCoords mercator.Coords // Нижня ліва частина прямокутника
 	maxCoords mercator.Coords // Верхня права частина прямокутника
@@ -52,48 +74,115 @@ type rect struct {
 	nodes     []node
 }
 
-func (head *rect) area() float64 {
-	return math.Abs((head.maxCoords.Y - head.minCoords.Y) * (head.maxCoords.X - head.minCoords.X))
+func (r rect) fitArea(anotherRect rect) float64 {
+	left := math.Max(r.minCoords.X, anotherRect.minCoords.X)
+	top := math.Min(r.maxCoords.Y, anotherRect.maxCoords.Y)
+	right := math.Min(r.maxCoords.X, r.maxCoords.X)
+	bottom := math.Max(r.minCoords.Y, anotherRect.minCoords.Y)
+
+	width := right - left
+	height := top - bottom
+
+	if width < 0 || height < 0 {
+		return 0
+	}
+
+	return width * height
 }
 
-func (head *rect) resize(newNode node) {
-	head.minCoords.GetSmallest(newNode.coords, len(head.nodes) == 0)
-	head.maxCoords.GetBiggest(newNode.coords, len(head.nodes) == 0)
+func (r rect) addedArea(newNode node) float64 {
+	newR := r.rectWithNode(newNode)
+	return newR.area() - r.area()
 }
 
-func (head *rect) insert(newNode node) {
-	if len(head.subRects) != 0 {
-		if head.subRects[0].area() < head.subRects[1].area() {
-			head.subRects[0].insert(newNode)
+func (r rect) area() float64 {
+	return math.Abs((r.maxCoords.Y - r.minCoords.Y + 1) * (r.maxCoords.X - r.minCoords.X + 1))
+	//return math.Abs((r.maxCoords.Y - r.minCoords.Y) + (r.maxCoords.X - r.minCoords.X))*2
+}
+
+func (r rect) rectWithNode(checkNode node) rect {
+	r.resize(checkNode)
+	return r
+}
+
+func (r *rect) resize(newNode node) {
+	r.minCoords.GetSmallest(newNode.coords, len(r.nodes) == 0)
+	r.maxCoords.GetBiggest(newNode.coords, len(r.nodes) == 0)
+}
+
+func (r *rect) insert(newNode node) {
+	if len(r.subRects) != 0 {
+		if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) >
+			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
+			r.subRects[1].insert(newNode)
+		} else if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) <
+			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
+			r.subRects[0].insert(newNode)
 		} else {
-			head.subRects[1].insert(newNode)
+			if r.subRects[0].addedArea(newNode) < r.subRects[1].addedArea(newNode) {
+				r.subRects[0].insert(newNode)
+			} else {
+				r.subRects[1].insert(newNode)
+			}
 		}
 		return
 	}
-	if len(head.nodes) == maxNodes {
-		head.split()
-		head.insert(newNode)
+
+	if len(r.nodes) == maxNodes {
+		r.split()
+		r.insert(newNode)
 		return
 	}
 
-	head.minCoords.GetSmallest(newNode.coords, len(head.nodes) == 0)
-	head.maxCoords.GetBiggest(newNode.coords, len(head.nodes) == 0)
+	r.resize(newNode)
 
-	head.nodes = append(head.nodes, newNode)
+	r.nodes = append(r.nodes, newNode)
 }
 
-func (head *rect) split() {
-	if len(head.nodes) == 0 {
+func (r *rect) takeFurther() (node, node) {
+	var maxNode, minNode node
+	var maxId, minId int
+	minNode = r.nodes[0]
+	maxNode = r.nodes[0]
+	for i, v := range r.nodes {
+		fmt.Println(v)
+		if minNode.coords.X+minNode.coords.Y > v.coords.X+v.coords.Y {
+			minId = i
+			minNode = v
+		}
+		if maxNode.coords.X+maxNode.coords.Y < v.coords.X+v.coords.Y {
+			maxId = i
+			maxNode = v
+		}
+	}
+	r.deleteNode(minId)
+	r.deleteNode(maxId)
+	return minNode, maxNode
+}
+
+func (r *rect) split() {
+	if len(r.nodes) == 0 {
 		log.Fatal("Nothing to split")
 	}
-	*head = subdivide(rect{}, rect{}, *head)
+	left, right := r.takeFurther()
+	leftRect := rect{
+		minCoords: left.coords,
+		maxCoords: left.coords,
+		nodes:     []node{left},
+	}
+	rightRect := rect{
+		minCoords: right.coords,
+		maxCoords: right.coords,
+		nodes:     []node{right},
+	}
+	*r = subdivide(leftRect, rightRect, *r)
 }
 
-func (head *rect) deleteNode(id int) {
-	temp := make([]node, len(head.nodes)-1)
-	copy(temp[:id], head.nodes[:id])
-	copy(temp[id:], head.nodes[id+1:])
-	head.nodes = temp
+func (r *rect) deleteNode(id int) {
+	temp := make([]node, len(r.nodes)-1)
+	copy(temp[:id], r.nodes[:id])
+	copy(temp[id:], r.nodes[id+1:])
+	r.nodes = temp
 }
 
 func subdivide(leftRect rect, rightRect rect, head rect) rect {
@@ -101,21 +190,31 @@ func subdivide(leftRect rect, rightRect rect, head rect) rect {
 	var minId int
 	var minArea = -1.0
 	for i, v := range head.nodes {
-		tempRect := leftRect
-		tempRect.nodes = append(tempRect.nodes, v)
-		if minArea == -1.0 || minArea > tempRect.area() {
-			minArea = tempRect.area()
+		if minArea == -1.0 || minArea > leftRect.addedArea(v) {
+			minArea = leftRect.addedArea(v)
 			minId = i
 			selected = &leftRect
 		}
-		tempRect = rightRect
-		tempRect.nodes = append(tempRect.nodes, v)
-		if minArea == -1.0 || minArea > tempRect.area() {
-			minArea = tempRect.area()
+		if minArea == -1.0 || minArea > rightRect.addedArea(v) {
+			minArea = leftRect.addedArea(v)
 			minId = i
 			selected = &rightRect
 		}
 	}
+	/////
+	fmt.Println("-----------------------------")
+	fmt.Println(leftRect)
+	fmt.Println(rightRect)
+	fmt.Println(leftRect.addedArea(head.nodes[minId]))
+	fmt.Println(rightRect.addedArea(head.nodes[minId]))
+	fmt.Println("Min", minArea, head.nodes[minId], head.nodes[minId].coords)
+	if selected == &rightRect {
+		fmt.Println("to right")
+	} else {
+		fmt.Println("to left")
+	}
+	fmt.Println("-----------------------------")
+	/////
 	if selected != nil {
 		(*selected).resize(head.nodes[minId])
 		(*selected).nodes = append((*selected).nodes, head.nodes[minId])
@@ -128,35 +227,35 @@ func subdivide(leftRect rect, rightRect rect, head rect) rect {
 	return subdivide(leftRect, rightRect, head)
 }
 
-func (head *rect) show() {
-	head.showUtil(0)
+func (r *rect) show() {
+	r.showUtil(0)
 }
 
-func (head *rect) showUtil(number int) {
-	fmt.Printf("%s|%d block: \n", strings.Repeat("->", number*3), number)
-	if len(head.subRects) != 0 {
-		head.subRects[0].showUtil(number + 1)
-		head.subRects[1].showUtil(number + 1)
+func (r *rect) showUtil(number int) {
+	fmt.Printf("%s|%d block [%.2f:%.2f,%.2f:%.2f]: \n", strings.Repeat("->", number*3), number, r.minCoords.X,
+		r.minCoords.Y, r.maxCoords.X, r.maxCoords.Y)
+	if len(r.subRects) != 0 {
+		r.subRects[0].showUtil(number + 1)
+		r.subRects[1].showUtil(number + 1)
 	} else {
-		for _, v := range head.nodes {
+		for _, v := range r.nodes {
 			fmt.Printf("%s|%v \n", strings.Repeat("->", number*3), v)
 		}
 	}
 }
 
 func main() {
-	file, err := os.Open("./src/ukraine_poi.csv")
+	file, err := os.Open("./src/test.csv")
 	if err != nil {
 		log.Fatal("No such file")
 	}
 	var head rect
 	reader := bufio.NewScanner(file)
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 11; i++ {
 		var newNode node
 		reader.Scan()
-		newNode.parseCSV(reader.Text())
+		newNode.parseCSVNoMercator(reader.Text())
 		head.insert(newNode)
 	}
 	fmt.Println(head)
-	head.show()
 }
