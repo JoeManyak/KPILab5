@@ -57,8 +57,8 @@ func (n *node) parseCSVNoMercator(str string) {
 		log.Fatal("Invalid data:", sl[1], "is not a float value")
 	}
 	n.coords = mercator.Coords{
-		X: Long,
-		Y: Lat,
+		X: Lat,
+		Y: Long,
 	}
 	n.nodeType = sl[2]
 	n.nodeSubType = sl[3]
@@ -112,19 +112,19 @@ func (r *rect) resize(newNode node) {
 
 func (r *rect) insert(newNode node) {
 	if len(r.subRects) != 0 {
-		if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) >
+		/*if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) >
 			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
 			r.subRects[1].insert(newNode)
 		} else if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) <
 			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
 			r.subRects[0].insert(newNode)
+		} else {*/
+		if r.subRects[0].addedArea(newNode) < r.subRects[1].addedArea(newNode) {
+			r.subRects[0].insert(newNode)
 		} else {
-			if r.subRects[0].addedArea(newNode) < r.subRects[1].addedArea(newNode) {
-				r.subRects[0].insert(newNode)
-			} else {
-				r.subRects[1].insert(newNode)
-			}
+			r.subRects[1].insert(newNode)
 		}
+		//}
 		return
 	}
 
@@ -145,7 +145,6 @@ func (r *rect) takeFurther() (node, node) {
 	minNode = r.nodes[0]
 	maxNode = r.nodes[0]
 	for i, v := range r.nodes {
-		fmt.Println(v)
 		if minNode.coords.X+minNode.coords.Y > v.coords.X+v.coords.Y {
 			minId = i
 			minNode = v
@@ -156,6 +155,9 @@ func (r *rect) takeFurther() (node, node) {
 		}
 	}
 	r.deleteNode(minId)
+	if minId < maxId {
+		maxId--
+	}
 	r.deleteNode(maxId)
 	return minNode, maxNode
 }
@@ -201,20 +203,6 @@ func subdivide(leftRect rect, rightRect rect, head rect) rect {
 			selected = &rightRect
 		}
 	}
-	/////
-	fmt.Println("-----------------------------")
-	fmt.Println(leftRect)
-	fmt.Println(rightRect)
-	fmt.Println(leftRect.addedArea(head.nodes[minId]))
-	fmt.Println(rightRect.addedArea(head.nodes[minId]))
-	fmt.Println("Min", minArea, head.nodes[minId], head.nodes[minId].coords)
-	if selected == &rightRect {
-		fmt.Println("to right")
-	} else {
-		fmt.Println("to left")
-	}
-	fmt.Println("-----------------------------")
-	/////
 	if selected != nil {
 		(*selected).resize(head.nodes[minId])
 		(*selected).nodes = append((*selected).nodes, head.nodes[minId])
@@ -245,16 +233,20 @@ func (r *rect) showUtil(number int) {
 }
 
 func main() {
-	file, err := os.Open("./src/test.csv")
+	file, err := os.Open("./src/ukraine_poi.csv")
 	if err != nil {
 		log.Fatal("No such file")
 	}
 	var head rect
 	reader := bufio.NewScanner(file)
-	for i := 0; i < 11; i++ {
+	/*	var i = 0
+		for reader.Scan() {
+			i++*/
+	for i := 0; i < 30000; i++ {
 		var newNode node
 		reader.Scan()
-		newNode.parseCSVNoMercator(reader.Text())
+		//newNode.parseCSVNoMercator(reader.Text())
+		newNode.parseCSV(reader.Text())
 		head.insert(newNode)
 	}
 	fmt.Println(head)
