@@ -22,16 +22,95 @@ type node struct {
 	addressNumber string //Адреса
 }
 
-func (n *node) parseCSV(str string) {
+func (r rect) findInRadius(coords mercator.GeoCoords, radius float64) []node {
+	merc := coords.ToMercator()
+	var result []node
+	r.findUtil(merc, radius, &result)
+	return result
+}
+
+func (r *rect) findUtil(coords mercator.Coords, radius float64, result *[]node) {
+	//	inBlock, circleInBlock := r.isInBlock(coords, radius)
+	for _, v := range r.subRects {
+		inBlock, circleInBlock := v.isInBlock(coords, radius)
+		if circleInBlock {
+			v.findUtil(coords, radius, result)
+			return
+		}
+		if inBlock {
+			for _, v2 := range v.getAllNodes() {
+				*result = append(*result, v2)
+			}
+		}
+
+	}
+}
+
+func (r *rect) getAllNodes() []node {
+	var result []node
+	for i := range r.subRects {
+		for _, v := range r.subRects[i].getAllNodes() {
+			result = append(result, v)
+		}
+	}
+	for i := range r.nodes {
+		result = append(result, r.nodes[i])
+	}
+	r.nodes = []node{}
+	return result
+}
+
+func (r *rect) isInBlock(coords mercator.Coords, radius float64) (bool, bool) {
+	//If in block
+	inBlock := (coords.Y < r.maxCoords.Y && coords.Y > r.minCoords.Y) &&
+		(coords.X < r.maxCoords.X && coords.X > r.minCoords.X)
+	//If circle fit in block
+	circleInBlock := (coords.Y+radius < r.maxCoords.Y && coords.Y-radius > r.minCoords.Y) &&
+		(coords.X+radius < r.maxCoords.X && coords.X-radius > r.minCoords.X)
+	return inBlock, circleInBlock
+}
+
+func (r *rect) isTouchRadius(coords mercator.Coords, radius float64) bool {
+	if coords.Y < r.maxCoords.Y && coords.Y > r.minCoords.Y {
+		if coords.X-radius < r.maxCoords.X && coords.X+radius > r.minCoords.X {
+			return true
+		}
+	}
+	if coords.X < r.maxCoords.X && coords.X > r.minCoords.X {
+		if coords.Y-radius < r.maxCoords.Y && coords.Y+radius > r.minCoords.Y {
+			return true
+		}
+	}
+	minXmaxY := mercator.Coords{
+		X: r.minCoords.X,
+		Y: r.maxCoords.Y,
+	}
+	maxXminY := mercator.Coords{
+		X: r.maxCoords.X,
+		Y: r.minCoords.Y,
+	}
+	if r.minCoords.InRadius(coords, radius) || r.maxCoords.InRadius(coords, radius) ||
+		minXmaxY.InRadius(coords, radius) || maxXminY.InRadius(coords, radius) {
+		return true
+	}
+	return false
+}
+
+func (n *node) parseCSV(str string) bool {
 	sl := strings.Split(str, ";")
+	if len(sl) < 7 {
+		return false
+	}
 	//Get coords
 	Lat, err := strconv.ParseFloat(sl[0], 64)
 	if err != nil {
 		log.Fatal("Invalid data:", sl[0], "is not a float value")
+		return false
 	}
 	Long, err := strconv.ParseFloat(sl[1], 64)
 	if err != nil {
 		log.Fatal("Invalid data:", sl[1], "is not a float value")
+		return false
 	}
 	geo := mercator.GeoCoords{
 		Latitude:  Lat,
@@ -43,6 +122,7 @@ func (n *node) parseCSV(str string) {
 	n.name = sl[4]
 	n.address = sl[5]
 	n.addressNumber = sl[6]
+	return true
 }
 
 func (n *node) parseCSVNoMercator(str string) {
@@ -233,20 +313,19 @@ func (r *rect) showUtil(number int) {
 }
 
 func main() {
-	file, err := os.Open("./src/ukraine_poi.csv")
+	file, err := os.Open("./src/test.csv")
 	if err != nil {
 		log.Fatal("No such file")
 	}
 	var head rect
 	reader := bufio.NewScanner(file)
-	/*	var i = 0
-		for reader.Scan() {
-			i++*/
-	for i := 0; i < 30000; i++ {
+	for reader.Scan() {
 		var newNode node
-		reader.Scan()
-		//newNode.parseCSVNoMercator(reader.Text())
-		newNode.parseCSV(reader.Text())
+		newNode.parseCSVNoMercator(reader.Text())
+		/*isValid := newNode.parseCSV(reader.Text())
+		if !isValid {
+			continue
+		}*/
 		head.insert(newNode)
 	}
 	fmt.Println(head)

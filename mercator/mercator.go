@@ -30,6 +30,10 @@ func (c *Coords) GetBiggest(newCoords Coords, isNull bool) {
 	}
 }
 
+func (c *Coords) InRadius(newCoords Coords, radius float64) bool {
+	return math.Sqrt(math.Pow(c.Y-newCoords.Y, 2)+math.Pow(c.X-newCoords.X, 2)) <= radius
+}
+
 const a = 6378137
 const b = 6356752.3142
 const f = (a - b) / a
