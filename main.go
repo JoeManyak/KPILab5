@@ -22,8 +22,9 @@ type node struct {
 	addressNumber string //Адреса
 }
 
-func (r rect) findInRadius(coords mercator.GeoCoords, radius float64) []node {
-	merc := coords.ToMercator()
+func (r rect) findInRadius(coords mercator.Coords, radius float64) []node {
+	/*merc := coords.ToMercator()*/
+	merc := coords
 	var result []node
 	r.findUtil(merc, radius, &result)
 	return result
@@ -33,6 +34,9 @@ func (r *rect) findUtil(coords mercator.Coords, radius float64, result *[]node) 
 	//	inBlock, circleInBlock := r.isInBlock(coords, radius)
 	for _, v := range r.subRects {
 		inBlock, circleInBlock := v.isInBlock(coords, radius)
+		fmt.Println("----------------------")
+		fmt.Println(inBlock, circleInBlock, v.minCoords, v.maxCoords, coords)
+		fmt.Println("----------------------")
 		if circleInBlock {
 			v.findUtil(coords, radius, result)
 			return
@@ -42,7 +46,18 @@ func (r *rect) findUtil(coords mercator.Coords, radius float64, result *[]node) 
 				*result = append(*result, v2)
 			}
 		}
-
+		if v.isTouchRadius(coords, radius) {
+			for _, v2 := range v.getAllNodes() {
+				if v2.coords.InRadius(coords, radius) {
+					*result = append(*result, v2)
+				}
+			}
+		}
+	}
+	for _, v := range r.nodes {
+		if v.coords.InRadius(coords, radius) {
+			*result = append(*result, v)
+		}
 	}
 }
 
@@ -186,11 +201,12 @@ func (r rect) rectWithNode(checkNode node) rect {
 }
 
 func (r *rect) resize(newNode node) {
-	r.minCoords.GetSmallest(newNode.coords, len(r.nodes) == 0)
-	r.maxCoords.GetBiggest(newNode.coords, len(r.nodes) == 0)
+	r.minCoords.GetSmallest(newNode.coords)
+	r.maxCoords.GetBiggest(newNode.coords)
 }
 
 func (r *rect) insert(newNode node) {
+	r.resize(newNode)
 	if len(r.subRects) != 0 {
 		/*if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) >
 			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
@@ -213,8 +229,6 @@ func (r *rect) insert(newNode node) {
 		r.insert(newNode)
 		return
 	}
-
-	r.resize(newNode)
 
 	r.nodes = append(r.nodes, newNode)
 }
@@ -328,5 +342,9 @@ func main() {
 		}*/
 		head.insert(newNode)
 	}
-	fmt.Println(head)
+	res := head.findInRadius(mercator.Coords{
+		X: 0,
+		Y: 0,
+	}, 6)
+	fmt.Println(res)
 }

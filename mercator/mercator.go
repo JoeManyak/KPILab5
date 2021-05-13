@@ -12,20 +12,20 @@ type Coords struct {
 	Y float64
 }
 
-func (c *Coords) GetSmallest(newCoords Coords, isNull bool) {
-	if c.X > newCoords.X || isNull {
+func (c *Coords) GetSmallest(newCoords Coords) {
+	if c.X > newCoords.X {
 		c.X = newCoords.X
 	}
-	if c.Y > newCoords.Y || isNull {
+	if c.Y > newCoords.Y {
 		c.Y = newCoords.Y
 	}
 }
 
-func (c *Coords) GetBiggest(newCoords Coords, isNull bool) {
-	if c.X < newCoords.X || isNull {
+func (c *Coords) GetBiggest(newCoords Coords) {
+	if c.X < newCoords.X {
 		c.X = newCoords.X
 	}
-	if c.Y < newCoords.Y || isNull {
+	if c.Y < newCoords.Y {
 		c.Y = newCoords.Y
 	}
 }
