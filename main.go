@@ -23,7 +23,7 @@ type node struct {
 }
 
 func (r rect) findInRadius(coords mercator.Coords, radius float64) []node {
-	/*merc := coords.ToMercator()*/
+	//merc := coords.ToMercator()
 	merc := coords
 	var result []node
 	r.findUtil(merc, radius, &result)
@@ -44,6 +44,10 @@ func (r *rect) findUtil(coords mercator.Coords, radius float64, result *[]node) 
 			}
 		}
 		if v.isTouchRadius(coords, radius) {
+			if len(v.nodes) == 0 {
+				v.findUtil(coords, radius, result)
+				continue
+			}
 			for _, v2 := range v.getAllNodes() {
 				if v2.coords.InRadius(coords, radius) {
 					*result = append(*result, v2)
@@ -343,5 +347,7 @@ func main() {
 		X: 0,
 		Y: 0,
 	}, 6)
-	fmt.Println(res)
+	for _, v := range res {
+		fmt.Println(v.coords, v.name)
+	}
 }
