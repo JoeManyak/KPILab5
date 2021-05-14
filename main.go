@@ -34,9 +34,6 @@ func (r *rect) findUtil(coords mercator.Coords, radius float64, result *[]node) 
 	//	inBlock, circleInBlock := r.isInBlock(coords, radius)
 	for _, v := range r.subRects {
 		inBlock, circleInBlock := v.isInBlock(coords, radius)
-		fmt.Println("----------------------")
-		fmt.Println(inBlock, circleInBlock, v.minCoords, v.maxCoords, coords)
-		fmt.Println("----------------------")
 		if circleInBlock {
 			v.findUtil(coords, radius, result)
 			return
@@ -140,6 +137,7 @@ func (n *node) parseCSV(str string) bool {
 	return true
 }
 
+//For tests
 func (n *node) parseCSVNoMercator(str string) {
 	sl := strings.Split(str, ";")
 	//Get coords
@@ -192,7 +190,6 @@ func (r rect) addedArea(newNode node) float64 {
 
 func (r rect) area() float64 {
 	return math.Abs((r.maxCoords.Y - r.minCoords.Y + 1) * (r.maxCoords.X - r.minCoords.X + 1))
-	//return math.Abs((r.maxCoords.Y - r.minCoords.Y) + (r.maxCoords.X - r.minCoords.X))*2
 }
 
 func (r rect) rectWithNode(checkNode node) rect {
@@ -208,6 +205,7 @@ func (r *rect) resize(newNode node) {
 func (r *rect) insert(newNode node) {
 	r.resize(newNode)
 	if len(r.subRects) != 0 {
+		// Якщо враховувати перетин використовувати це
 		/*if r.subRects[0].rectWithNode(newNode).fitArea(*r.subRects[1]) >
 			r.subRects[1].rectWithNode(newNode).fitArea(*r.subRects[0]) {
 			r.subRects[1].insert(newNode)
@@ -220,7 +218,6 @@ func (r *rect) insert(newNode node) {
 		} else {
 			r.subRects[1].insert(newNode)
 		}
-		//}
 		return
 	}
 
